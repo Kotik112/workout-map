@@ -57,13 +57,20 @@ const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 class App {
   #map;
+  #mapZoomLevel = 13;
   #mapEvent;
   #workouts = [];
 
   constructor() {
     this._getPosition();
+
+    // Get data from local storage
+    this._getLocalStorage();
+
+    // Event handlers
     form.addEventListener('submit', this._newWorkout.bind(this));
     inputType.addEventListener('change', this._toggleElevationField.bind(this));
+    containerWorkouts.addEventListener('click', this._moveToPopup.bind(this));
   }
 
   _getPosition() {
@@ -74,7 +81,7 @@ class App {
 
   _loadMap(position) {
     const { longitude, latitude } = position.coords;
-    this.#map = L.map('map').setView([latitude, longitude], 13);
+    this.#map = L.map('map').setView([latitude, longitude], this.#mapZoomLevel);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
@@ -83,6 +90,9 @@ class App {
 
     //Handling clicks on the map
     this.#map.on('click', this._showForm.bind(this));
+
+    // Render markers on the map
+    this.#workouts.forEach(work => this._renderWorkoutMarker(work));
   }
 
   _showForm(mapEvent) {
@@ -143,6 +153,25 @@ class App {
 
     //Render workout on map as a marker
     this._renderWorkoutMarker(workout, type);
+
+    // Set local storage to all workouts
+    this._setLocalStorage();
+  }
+
+  _moveToPopup(event) {
+    const workoutElement = event.target.closest('.workout');
+    if (!workoutElement) return;
+
+    const workout = this.#workouts.find(
+      work => work.id === workoutElement.dataset.id
+    );
+
+    this.#map.setView(workout.coords, this.#mapZoomLevel, {
+      animate: true,
+      pan: {
+        duration: 1,
+      },
+    });
   }
 
   _clearForm() {
@@ -161,13 +190,9 @@ class App {
   }
 
   _renderWorkoutMarker(workout) {
-    const month = months[workout.date.getMonth()];
-    const workoutType =
-      workout.type.charAt(0).toUpperCase() + workout.type.slice(1);
-
-    const description = `${
-      workout.type === 'running' ? '🏃‍♂️' : '🚲'
-    } ${workoutType} workout on ${month} ${workout.date.getDate()}`;
+    const description = `${workout.type === 'running' ? '🏃‍♂️' : '🚲'} ${
+      workout.description
+    }`;
 
     const popup = L.popup({
       maxWidth: 250,
@@ -229,6 +254,29 @@ class App {
         `;
 
     form.insertAdjacentHTML('afterend', html);
+  }
+
+  _setLocalStorage() {
+    localStorage.setItem('workouts', JSON.stringify(this.#workouts));
+  }
+
+  _getLocalStorage() {
+    const data = JSON.parse(localStorage.getItem('workouts'));
+    if (!data) return;
+    data.forEach(
+      it =>
+        (it.__proto__ =
+          it.type === 'running' ? Running.prototype : Cycling.prototype)
+    );
+    this.#workouts = data;
+    this.#workouts.forEach(work => {
+      this._renderWorkout(work);
+    });
+  }
+
+  reset() {
+    localStorage.removeItem('workouts');
+    location.reload();
   }
 }
 
